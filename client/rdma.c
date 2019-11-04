@@ -237,13 +237,13 @@ static void rdmacli_on_addr_resolved(struct rdma_cm_id *id)
     conn->rdma_local_region = malloc(conn->conf->buffer_size);
 
     if (conn->conf->mode == PASSIVE_READ) {
-        rdma_local_mr_flag = IBV_ACCESS_REMOTE_WRITE;
-    } else if (conn->conf->mode == PASSIVE_WRITE) {
         rdma_local_mr_flag = IBV_ACCESS_REMOTE_READ;
+    } else if (conn->conf->mode == PASSIVE_WRITE) {
+        rdma_local_mr_flag = IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE;
     } else if (conn->conf->mode == ACTIVE_READ) {
-        rdma_local_mr_flag = 0;
-    } else if (conn->conf->mode == ACTIVE_WRITE) {
         rdma_local_mr_flag = IBV_ACCESS_LOCAL_WRITE;
+    } else if (conn->conf->mode == ACTIVE_WRITE) {
+        rdma_local_mr_flag = 0;
     }
     TEST_Z(conn->send_msg_mr = ibv_reg_mr(conn->pd, conn->send_msg, sizeof(struct message), 0));
     TEST_Z(conn->recv_msg_mr = ibv_reg_mr(conn->pd, conn->recv_msg, sizeof(struct message), 0));
