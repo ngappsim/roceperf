@@ -184,6 +184,7 @@ static int rdmasrv_on_connection_request(struct rdma_cm_id *id)
     struct ibv_qp_init_attr qp_attr;
     struct rdmasrv_listener_property *prop;
     unsigned rdma_local_mr_flag = 0; 
+    struct rdma_conn_param cm_params;
 
     /* build context */
     conn = malloc(sizeof(struct rdma_connection));
@@ -243,7 +244,6 @@ static int rdmasrv_on_connection_request(struct rdma_cm_id *id)
     }
 
     /* Now accept */
-    struct rdma_conn_param cm_params;
     memset(&cm_params, 0, sizeof(cm_params));
     cm_params.initiator_depth = cm_params.responder_resources = 1;
     cm_params.rnr_retry_count = 7;

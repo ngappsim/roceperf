@@ -30,7 +30,9 @@ static void signal_handler(int sig)
 
 int main(int argc, char **argv)
 {
-    int opt;
+    pid_t pids[RDMASRV_MAX_WORKER];
+    int opt, i;
+    unsigned long prev_rx_tr = 0, prev_tx_tr = 0, prev_rx_b = 0, prev_tx_b = 0;
 
     while((opt = getopt(argc, argv, "p:b:q:w:s:i:l:")) != -1) {
         switch (opt) {
@@ -82,8 +84,7 @@ int main(int argc, char **argv)
 
     memset(g_stats, 0, sizeof(struct rdmasrv_stat));
 
-    pid_t pids[RDMASRV_MAX_WORKER];
-    for (int i = 0; i < g_num_worker; i ++) {
+    for (i = 0; i < g_num_worker; i ++) {
         pid_t pid = fork();
         if (pid == 0) {
             cpu_set_t set;
@@ -99,11 +100,10 @@ int main(int argc, char **argv)
     }
     g_ctrl->start = 1;
 
-    unsigned long prev_rx_tr = 0, prev_tx_tr = 0, prev_rx_b = 0, prev_tx_b = 0;
     while (g_ctrl->stop == 0) {
         sleep(g_stat_interval);
         int total_rx_tr = 0, total_tx_tr = 0, total_rx_b = 0, total_tx_b = 0;
-        for (int i = 0; i < g_num_worker; i ++) {
+        for (i = 0; i < g_num_worker; i ++) {
             total_rx_tr += g_stats[i].rx_transactions;
             total_tx_tr += g_stats[i].tx_transactions;
             total_rx_b += g_stats[i].rxbytes;
@@ -119,7 +119,7 @@ int main(int argc, char **argv)
         prev_tx_b = total_tx_b;
     }
 
-    for (int i = 0; i < g_num_worker; i++) {
+    for (i = 0; i < g_num_worker; i++) {
         int status;
         waitpid(pids[i], &status, 0);
     }

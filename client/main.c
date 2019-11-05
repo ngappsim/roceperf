@@ -24,8 +24,11 @@ static void signal_handler(int sig)
 
 int main(int argc, char **argv)
 {
-    int opt, port, buffer_size, num_qp, num_worker, mode, stat_interval, duration, loop;
+    int i, opt, port, buffer_size, num_qp, num_worker, mode, stat_interval, duration, loop;
     char host[64];
+    pid_t pids[RDMASRV_MAX_WORKER];
+	int total_duration = 0;
+    unsigned long prev_rx_tr = 0, prev_tx_tr = 0, prev_rx_b = 0, prev_tx_b = 0;
 
     while((opt = getopt(argc, argv, "p:h:b:q:w:s:i:d:l:")) != -1) {
         switch (opt) {
@@ -99,8 +102,7 @@ int main(int argc, char **argv)
 
     memset(g_stats, 0, sizeof(struct rdmacli_stat));
 
-    pid_t pids[RDMASRV_MAX_WORKER];
-    for (int i = 0; i < num_worker; i ++) {
+    for (i = 0; i < num_worker; i ++) {
         pid_t pid = fork();
         if (pid == 0) {
             cpu_set_t set;
@@ -116,8 +118,6 @@ int main(int argc, char **argv)
     }
     g_ctrl->start = 1;
 
-	int total_duration = 0;
-    unsigned long prev_rx_tr = 0, prev_tx_tr = 0, prev_rx_b = 0, prev_tx_b = 0;
     while (g_ctrl->stop == 0) {
         sleep(stat_interval);
         int total_rx_tr = 0, total_tx_tr = 0, total_rx_b = 0, total_tx_b = 0;
@@ -142,7 +142,7 @@ int main(int argc, char **argv)
         }
     }
 
-    for (int i = 0; i < num_worker; i++) {
+    for (i = 0; i < num_worker; i++) {
         int status;
         waitpid(pids[i], &status, 0);
     }
