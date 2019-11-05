@@ -98,6 +98,11 @@ static void rdmacli_handle_cc_events(void *data, int event)
         ibv_ack_cq_events(cq, 1);
         TEST_NZ(ibv_req_notify_cq(cq, 0));
         while (ibv_poll_cq(cq, 1, &wc)) {
+            if (wc.status != IBV_WC_SUCCESS) {
+                fprintf(stderr, "wc.status  != IBV_WC_SUCCESS %d\n", wc.status);
+                continue;
+            }
+            //fprintf(stdout, "Received cc opcode: %d\n", wc.opcode);
             if (wc.opcode & IBV_WC_RECV) {
                 if (conn->recv_msg->type == MSG_MR) {
                     if ((conn->conf->mode == ACTIVE_WRITE || 
@@ -105,8 +110,10 @@ static void rdmacli_handle_cc_events(void *data, int event)
                         memcpy(&conn->peer_mr, &conn->recv_msg->data.mr, sizeof(conn->peer_mr));
                         conn->state = CONN_CONNECTED_MR_RECEIVED;
                         if (conn->conf->mode == ACTIVE_READ) {
+                        fprintf(stdout, "%s:%d Posting READ.\n", __func__, __LINE__);
                             post_read(conn);
                         } else {
+                        fprintf(stdout, "%s:%d Posting WRITE.\n", __func__, __LINE__);
                             post_write(conn);
                         }
                     } else {
@@ -123,27 +130,16 @@ static void rdmacli_handle_cc_events(void *data, int event)
                         continue;
                     }
                 }
-            } else if (wc.opcode & IBV_WC_SEND) {
-                if ((conn->conf->mode == PASSIVE_READ ||
-                        conn->conf->mode == PASSIVE_WRITE) && conn->state == CONN_CONNECTED) {
-                    post_receives(conn);
-                    conn->state = CONN_CONNECTED_MR_SENT;
-                } else if ((conn->conf->mode == ACTIVE_WRITE ||
-                       conn->conf->mode == ACTIVE_READ) && conn->state == CONN_CONNECTED_OPS_COMPLETED) {
-                    rdma_disconnect(conn->id);
-                    conn->state = CONN_DISCONNECTING;
-                } else {
-                    fprintf(stderr, "Recieved WC_SEND in wrong state.\n");
-                    continue;
-                }
             } else if (wc.opcode & IBV_WC_RDMA_READ) {
                 if (conn->conf->mode == ACTIVE_READ && 
                     (conn->state == CONN_CONNECTED_MR_RECEIVED || conn->state == CONN_CONNECTED_OPS_COMPLETED)) {
                     conn->state = CONN_CONNECTED_OPS_COMPLETED;
                     ++conn->loop;
-                    if (conn->loop >= conn->conf->loop) {
+                    if (conn->conf->loop && conn->loop >= conn->conf->loop) {
+                        fprintf(stdout, "%s:%d Sending DONE.\n", __func__, __LINE__);
                         post_send_done(conn);
                     } else {
+                        //fprintf(stdout, "%s:%d Posting READ.\n", __func__, __LINE__);
                         post_read(conn);
                     }
                 } else {
@@ -156,12 +152,28 @@ static void rdmacli_handle_cc_events(void *data, int event)
                     conn->state = CONN_CONNECTED_OPS_COMPLETED;
                     ++conn->loop;
                     if (conn->loop >= conn->conf->loop) {
+                        fprintf(stdout, "%s:%d Sending DONE.\n", __func__, __LINE__);
                         post_send_done(conn);
                     } else {
+                        //fprintf(stdout, "%s:%d Posting WRITE.\n", __func__, __LINE__);
                         post_write(conn);
                     }
                 } else {
                     fprintf(stderr, "Recieved WC_RDMA_WRITE in wrong state.\n");
+                    continue;
+                }
+            } else {
+                if ((conn->conf->mode == PASSIVE_READ ||
+                        conn->conf->mode == PASSIVE_WRITE) && conn->state == CONN_CONNECTED) {
+                    fprintf(stdout, "%s:%d Posting recvs.\n", __func__, __LINE__);
+                    post_receives(conn);
+                    conn->state = CONN_CONNECTED_MR_SENT;
+                } else if ((conn->conf->mode == ACTIVE_WRITE ||
+                       conn->conf->mode == ACTIVE_READ) && conn->state == CONN_CONNECTED_OPS_COMPLETED) {
+                    rdma_disconnect(conn->id);
+                    conn->state = CONN_DISCONNECTING;
+                } else {
+                    fprintf(stderr, "Recieved WC_SEND in wrong state.\n");
                     continue;
                 }
             }
@@ -188,6 +200,7 @@ static void rdmacli_on_established(struct rdma_cm_id *id)
     struct rdma_connection *conn = id->context;
     conn->state = CONN_CONNECTED;
     if (conn->conf->mode == PASSIVE_WRITE || conn->conf->mode == PASSIVE_READ) {
+        fprintf(stdout, "%s:%d Sending memory region.\n", __func__, __LINE__);
         post_send_mr(conn);
     }
 }
@@ -246,7 +259,7 @@ static void rdmacli_on_addr_resolved(struct rdma_cm_id *id)
         rdma_local_mr_flag = 0;
     }
     TEST_Z(conn->send_msg_mr = ibv_reg_mr(conn->pd, conn->send_msg, sizeof(struct message), 0));
-    TEST_Z(conn->recv_msg_mr = ibv_reg_mr(conn->pd, conn->recv_msg, sizeof(struct message), 0));
+    TEST_Z(conn->recv_msg_mr = ibv_reg_mr(conn->pd, conn->recv_msg, sizeof(struct message), IBV_ACCESS_LOCAL_WRITE));
     TEST_Z(conn->rdma_local_mr = ibv_reg_mr(conn->pd, conn->rdma_local_region, conn->conf->buffer_size, rdma_local_mr_flag));
 
     /* Add CQ fd to poll event */
@@ -255,6 +268,7 @@ static void rdmacli_on_addr_resolved(struct rdma_cm_id *id)
 
     /* recv if active read / write */
     if (conn->conf->mode == ACTIVE_READ || conn->conf->mode == ACTIVE_WRITE) {
+        fprintf(stdout, "%s:%d posting recv.\n", __func__, __LINE__);
         post_receives(conn);
     }
 
@@ -265,15 +279,19 @@ static void rdmacli_on_addr_resolved(struct rdma_cm_id *id)
 static void rdmacli_on_event(struct rdma_cm_event *event)
 {
     if (event->event == RDMA_CM_EVENT_ADDR_RESOLVED) {
+        fprintf(stdout, "RDMA_CM_EVENT_ADDR_RESOLVED received .. \n");
         rdmacli_on_addr_resolved(event->id);
     }
     else if (event->event == RDMA_CM_EVENT_ROUTE_RESOLVED) {
+        fprintf(stdout, "RDMA_CM_EVENT_ROUTE_RESOLVED received .. \n");
         rdmacli_on_route_resolved(event->id);
     }
     else if (event->event == RDMA_CM_EVENT_ESTABLISHED) {
+        fprintf(stdout, "RDMA_CM_EVENT_ESTABLISHED received .. \n");
         rdmacli_on_established(event->id);
     }
     else if (event->event == RDMA_CM_EVENT_DISCONNECTED) {
+        fprintf(stdout, "RDMA_CM_EVENT_DISCONNECTED .. \n");
         rdmacli_on_disconnected(event->id);
     }
     else {
@@ -303,6 +321,7 @@ void rdmacli_run(void)
     rdmacli_event_init();
 
     while(g_ctrl->start == 0);
+    fprintf(stdout, "Starting test ...\n");
 
     snprintf(dst_port, 63, "%d", g_conf->port + g_slave_id);
     TEST_NZ(getaddrinfo(g_conf->host, dst_port, NULL, &addr));
