@@ -58,7 +58,7 @@ int main(int argc, char **argv)
                 g_loop = atoi(optarg);
                 break;
             default:
-                fprintf(stderr, "server -p <start port> -b <buffer size> -q <number of queue pairs per connections> -w <number of workers> -s <0: read, 1: write, 2: passive read, 3: passive write> -i <stat interval>\n");
+                fprintf(stderr, "server -p <start port> -b <buffer size> -q <number of queue pairs per connections> -w <number of workers> -s <0: passive read, 1: passive write, 2: active read, 3: active write> -i <stat interval>\n");
                 exit(-1);
         }
     }

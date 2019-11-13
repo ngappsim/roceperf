@@ -24,13 +24,13 @@ static void signal_handler(int sig)
 
 int main(int argc, char **argv)
 {
-    int i, opt, port, buffer_size, num_qp, num_worker, mode, stat_interval, duration, loop;
-    char host[64];
+    int i, opt, port, buffer_size, num_qp, num_worker, mode, stat_interval, duration, loop, num_ips;
+    char host[64], client_start[64];
     pid_t pids[RDMASRV_MAX_WORKER];
 	int total_duration = 0;
     unsigned long prev_rx_tr = 0, prev_tx_tr = 0, prev_rx_b = 0, prev_tx_b = 0;
 
-    while((opt = getopt(argc, argv, "p:h:b:q:w:s:i:d:l:")) != -1) {
+    while((opt = getopt(argc, argv, "p:h:b:q:w:s:i:d:l:c:n:")) != -1) {
         switch (opt) {
             case 'p':
                 port = atoi(optarg);
@@ -59,8 +59,14 @@ int main(int argc, char **argv)
             case 'l':
                 loop = atoi(optarg);
                 break;
+            case 'c':
+                strcpy(client_start, optarg);
+                break;
+            case 'n':
+                num_ips = atoi(optarg);
+                break;
             default:
-                fprintf(stderr, "client -p <port> -h <destination IP> -b <buffer size> -q <num of queue pairs> -w <workers> -s <mode 1: active read, 2: passive read> -i <stats interval> -d <duration> -l <loop 0: infinite>\n");
+                fprintf(stderr, "client -p <port> -h <destination IP> -b <buffer size> -q <num of queue pairs> -w <workers> -s <0: passive read 1: passive write 2: active read 3: active write> -i <stats interval> -d <duration> -l <loop 0: infinite> -c <start client IP> -n <number of client IPs>\n");
                 exit(100);
         }
     }
@@ -95,6 +101,8 @@ int main(int argc, char **argv)
         g_conf->duration = duration;
         g_conf->loop = loop;
         strcpy(g_conf->host, host);
+        strcpy(g_conf->client_start, client_start);
+        g_conf->num_ips = num_ips;
     }
 
     g_ctrl->stop = 0;
@@ -119,9 +127,9 @@ int main(int argc, char **argv)
     g_ctrl->start = 1;
 
     while (g_ctrl->stop == 0) {
+        int i, total_rx_tr = 0, total_tx_tr = 0, total_rx_b = 0, total_tx_b = 0;
         sleep(stat_interval);
-        int total_rx_tr = 0, total_tx_tr = 0, total_rx_b = 0, total_tx_b = 0;
-        for (int i = 0; i < num_worker; i ++) {
+        for (i = 0; i < num_worker; i ++) {
             total_rx_tr += g_stats[i].rx_transactions;
             total_tx_tr += g_stats[i].tx_transactions;
             total_rx_b += g_stats[i].rxbytes;

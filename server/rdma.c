@@ -320,7 +320,7 @@ static void rdmasrv_handle_ec_events(void *data, int ev)
 
 void rdmasrv_run(int port, int buffer_size, int num_qp, rdmasrv_mode mode, int loop)
 {
-    struct sockaddr_in6 addr;
+    struct sockaddr_in addr;
     struct rdma_cm_id *listener = NULL;
     struct rdma_event_channel *ec = NULL;
     struct rdmasrv_listener_property prop = {
@@ -333,8 +333,8 @@ void rdmasrv_run(int port, int buffer_size, int num_qp, rdmasrv_mode mode, int l
     rdmasrv_event_init();
 
     memset(&addr, 0, sizeof(addr));
-    addr.sin6_family = AF_INET6;
-    addr.sin6_port = htons(port);
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
 
     TEST_Z(ec = rdma_create_event_channel());
     TEST_NZ(rdma_create_id(ec, &listener, &prop, RDMA_PS_TCP));

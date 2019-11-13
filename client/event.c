@@ -46,10 +46,10 @@ void rdmacli_del_event(void *opaque)
 void rdmacli_handle_event(void)
 {
     struct epoll_event events[1024];
-    int nfds;
+    int i, nfds;
 
     nfds = epoll_wait(g_epoll_fd, events, 1024, 1);
-    for (int i = 0; i < nfds; i++) {
+    for (i = 0; i < nfds; i++) {
         struct event_struct *event = events[i].data.ptr;
         event->func(event->data, EPOLLIN);
     }

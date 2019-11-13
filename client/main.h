@@ -55,6 +55,8 @@ struct rdmacli_conf {
     int duration;
     int loop;
     char host[64];
+    char client_start[64];
+    int num_ips;
 };
 
 extern struct rdmacli_stat *g_stats;

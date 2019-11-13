@@ -1,4 +1,6 @@
-
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include "event.h"
 #include "rdma.h"
 
@@ -312,10 +314,21 @@ static void rdmacli_handle_ec_events(void *data, int ev)
     }
 }
 
+static char *increment_ip(char* address_string, int num)
+{
+    in_addr_t address = inet_addr(address_string);
+    address = ntohl(address);
+    address += num;
+    address = htonl(address);
+    struct in_addr address_struct;
+    address_struct.s_addr = address;
+    return inet_ntoa(address_struct);
+}
+
 void rdmacli_run(void)
 {
     int i;
-    struct addrinfo *addr;
+    struct addrinfo *addr, *cliaddr;
     char dst_port[64];
 
     rdmacli_event_init();
@@ -327,6 +340,7 @@ void rdmacli_run(void)
     TEST_NZ(getaddrinfo(g_conf->host, dst_port, NULL, &addr));
 
     for (i = 0; i < g_conf->num_qp; i++) {
+        char cliip[64];
         conns[i] = malloc(sizeof(struct rdma_connection));
         memset(conns[i], 0, sizeof(struct rdma_connection));
         conns[i]->conf = g_conf;
@@ -334,7 +348,10 @@ void rdmacli_run(void)
         TEST_NZ(rdma_create_id(conns[i]->ec, &conns[i]->id, conns[i], RDMA_PS_TCP));
         TEST_NZ(fcntl(conns[i]->ec->fd, F_SETFL, fcntl(conns[i]->ec->fd, F_GETFL) | O_NONBLOCK));
         conns[i]->ec_event_opaque = rdmacli_add_event(conns[i]->ec->fd, (void *)conns[i], rdmacli_handle_ec_events);
-        TEST_NZ(rdma_resolve_addr(conns[i]->id, NULL, addr->ai_addr, 500));
+        sprintf(cliip, "%s", increment_ip(g_conf->client_start, i % g_conf->num_ips));
+        fprintf(stdout, "conn id: %d source IP: %s\n", i, cliip);
+        TEST_NZ(getaddrinfo(cliip, NULL, NULL, &cliaddr));
+        TEST_NZ(rdma_resolve_addr(conns[i]->id, cliaddr->ai_addr, addr->ai_addr, 500));
     }
 
     while(g_ctrl->stop == 0)
