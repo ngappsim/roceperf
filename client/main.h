@@ -45,18 +45,29 @@ typedef enum {
     ACTIVE_WRITE,
 } rdmacli_mode;
 
+#define RDMACLI_MAX_WORKER  64
+#define RDMACLI_MAX_IP_PER_WORKER   64
+#define RDMACLI_MAX_IP_STR_LEN      16
+
 struct rdmacli_conf {
     int port;
     int buffer_size;
     int num_qp;
+//    struct {
+//        int num_qp;
+//    } qp[RDMACLI_MAX_WORKER];
     int num_worker;
     rdmacli_mode mode;
     int stat_interval;
     int duration;
     int loop;
-    char host[64];
-    char client_start[64];
+    char host[RDMACLI_MAX_IP_STR_LEN];
+    char client_start[RDMACLI_MAX_IP_STR_LEN];
     int num_ips;
+    struct {
+        char ip[RDMACLI_MAX_IP_STR_LEN];
+        int available;
+    } ipmap[RDMACLI_MAX_WORKER];
 };
 
 extern struct rdmacli_stat *g_stats;

@@ -6,6 +6,8 @@
 
 #define MAX_CONNECTIONS 1024
 
+struct rdma_event_channel *g_ec;
+void *g_ec_event_opaque = NULL;
 static struct rdma_connection *conns[MAX_CONNECTIONS];
 
 static inline void post_receives(struct rdma_connection *conn)
@@ -101,7 +103,7 @@ static void rdmacli_handle_cc_events(void *data, int event)
         TEST_NZ(ibv_req_notify_cq(cq, 0));
         while (ibv_poll_cq(cq, 1, &wc)) {
             if (wc.status != IBV_WC_SUCCESS) {
-                fprintf(stderr, "wc.status  != IBV_WC_SUCCESS %d\n", wc.status);
+                fprintf(stderr, "[%d] wc.status  != IBV_WC_SUCCESS %d\n", g_slave_id, wc.status);
                 continue;
             }
             //fprintf(stdout, "Received cc opcode: %d\n", wc.opcode);
@@ -112,14 +114,14 @@ static void rdmacli_handle_cc_events(void *data, int event)
                         memcpy(&conn->peer_mr, &conn->recv_msg->data.mr, sizeof(conn->peer_mr));
                         conn->state = CONN_CONNECTED_MR_RECEIVED;
                         if (conn->conf->mode == ACTIVE_READ) {
-                        fprintf(stdout, "%s:%d Posting READ.\n", __func__, __LINE__);
+                        fprintf(stdout, "[%d] %s:%d Posting READ.\n", g_slave_id, __func__, __LINE__);
                             post_read(conn);
                         } else {
-                        fprintf(stdout, "%s:%d Posting WRITE.\n", __func__, __LINE__);
+                        fprintf(stdout, "[%d] %s:%d Posting WRITE.\n", g_slave_id, __func__, __LINE__);
                             post_write(conn);
                         }
                     } else {
-                        fprintf(stderr, "Recieved MR in wrong state.\n");
+                        fprintf(stderr, "[%d] Recieved MR in wrong state.\n", g_slave_id);
                         continue;
                     }
                 } else if (conn->recv_msg->type == MSG_DONE) {
@@ -128,7 +130,7 @@ static void rdmacli_handle_cc_events(void *data, int event)
                         rdma_disconnect(conn->id);
                         conn->state = CONN_DISCONNECTING;
                     } else {
-                        fprintf(stderr, "Recieved DONE in wrong state.\n");
+                        fprintf(stderr, "[%d] Recieved DONE in wrong state.\n", g_slave_id);
                         continue;
                     }
                 }
@@ -138,14 +140,14 @@ static void rdmacli_handle_cc_events(void *data, int event)
                     conn->state = CONN_CONNECTED_OPS_COMPLETED;
                     ++conn->loop;
                     if (conn->conf->loop && conn->loop >= conn->conf->loop) {
-                        fprintf(stdout, "%s:%d Sending DONE.\n", __func__, __LINE__);
+                        fprintf(stdout, "[%d] %s:%d Sending DONE.\n", g_slave_id, __func__, __LINE__);
                         post_send_done(conn);
                     } else {
                         //fprintf(stdout, "%s:%d Posting READ.\n", __func__, __LINE__);
                         post_read(conn);
                     }
                 } else {
-                    fprintf(stderr, "Recieved WC_RDMA_READ in wrong state.\n");
+                    fprintf(stderr, "[%d] Recieved WC_RDMA_READ in wrong state.\n", g_slave_id);
                     continue;
                 }
             } else if (wc.opcode & IBV_WC_RDMA_WRITE) {
@@ -154,20 +156,20 @@ static void rdmacli_handle_cc_events(void *data, int event)
                     conn->state = CONN_CONNECTED_OPS_COMPLETED;
                     ++conn->loop;
                     if (conn->loop >= conn->conf->loop) {
-                        fprintf(stdout, "%s:%d Sending DONE.\n", __func__, __LINE__);
+                        fprintf(stdout, "[%d] %s:%d Sending DONE.\n", g_slave_id, __func__, __LINE__);
                         post_send_done(conn);
                     } else {
                         //fprintf(stdout, "%s:%d Posting WRITE.\n", __func__, __LINE__);
                         post_write(conn);
                     }
                 } else {
-                    fprintf(stderr, "Recieved WC_RDMA_WRITE in wrong state.\n");
+                    fprintf(stderr, "[%d] Recieved WC_RDMA_WRITE in wrong state.\n", g_slave_id);
                     continue;
                 }
             } else {
                 if ((conn->conf->mode == PASSIVE_READ ||
                         conn->conf->mode == PASSIVE_WRITE) && conn->state == CONN_CONNECTED) {
-                    fprintf(stdout, "%s:%d Posting recvs.\n", __func__, __LINE__);
+                    fprintf(stdout, "[%d] %s:%d Posting recvs.\n", g_slave_id, __func__, __LINE__);
                     post_receives(conn);
                     conn->state = CONN_CONNECTED_MR_SENT;
                 } else if ((conn->conf->mode == ACTIVE_WRITE ||
@@ -175,7 +177,7 @@ static void rdmacli_handle_cc_events(void *data, int event)
                     rdma_disconnect(conn->id);
                     conn->state = CONN_DISCONNECTING;
                 } else {
-                    fprintf(stderr, "Recieved WC_SEND in wrong state.\n");
+                    fprintf(stderr, "[%d] Recieved WC_SEND in wrong state.\n", g_slave_id);
                     continue;
                 }
             }
@@ -202,7 +204,7 @@ static void rdmacli_on_established(struct rdma_cm_id *id)
     struct rdma_connection *conn = id->context;
     conn->state = CONN_CONNECTED;
     if (conn->conf->mode == PASSIVE_WRITE || conn->conf->mode == PASSIVE_READ) {
-        fprintf(stdout, "%s:%d Sending memory region.\n", __func__, __LINE__);
+        fprintf(stdout, "[%d] %s:%d Sending memory region.\n", g_slave_id, __func__, __LINE__);
         post_send_mr(conn);
     }
 }
@@ -270,7 +272,7 @@ static void rdmacli_on_addr_resolved(struct rdma_cm_id *id)
 
     /* recv if active read / write */
     if (conn->conf->mode == ACTIVE_READ || conn->conf->mode == ACTIVE_WRITE) {
-        fprintf(stdout, "%s:%d posting recv.\n", __func__, __LINE__);
+        fprintf(stdout, "[%d] %s:%d posting recv.\n", g_slave_id, __func__, __LINE__);
         post_receives(conn);
     }
 
@@ -281,32 +283,31 @@ static void rdmacli_on_addr_resolved(struct rdma_cm_id *id)
 static void rdmacli_on_event(struct rdma_cm_event *event)
 {
     if (event->event == RDMA_CM_EVENT_ADDR_RESOLVED) {
-        fprintf(stdout, "RDMA_CM_EVENT_ADDR_RESOLVED received .. \n");
+        fprintf(stdout, "[%d] RDMA_CM_EVENT_ADDR_RESOLVED received .. \n", g_slave_id);
         rdmacli_on_addr_resolved(event->id);
     }
     else if (event->event == RDMA_CM_EVENT_ROUTE_RESOLVED) {
-        fprintf(stdout, "RDMA_CM_EVENT_ROUTE_RESOLVED received .. \n");
+        fprintf(stdout, "[%d] RDMA_CM_EVENT_ROUTE_RESOLVED received .. \n", g_slave_id);
         rdmacli_on_route_resolved(event->id);
     }
     else if (event->event == RDMA_CM_EVENT_ESTABLISHED) {
-        fprintf(stdout, "RDMA_CM_EVENT_ESTABLISHED received .. \n");
+        fprintf(stdout, "[%d] RDMA_CM_EVENT_ESTABLISHED received .. \n", g_slave_id);
         rdmacli_on_established(event->id);
     }
     else if (event->event == RDMA_CM_EVENT_DISCONNECTED) {
-        fprintf(stdout, "RDMA_CM_EVENT_DISCONNECTED .. \n");
+        fprintf(stdout, "[%d] RDMA_CM_EVENT_DISCONNECTED .. \n", g_slave_id);
         rdmacli_on_disconnected(event->id);
     }
     else {
-        fprintf(stderr, "on_event: %d\n", event->event);
+        fprintf(stderr, "[%d] on_event: %d\n", g_slave_id, event->event);
         die("on_event: unknown event.");
     }
 }
 
 static void rdmacli_handle_ec_events(void *data, int ev)
 {
-    struct rdma_connection *conn = data;
     struct rdma_cm_event *event;
-    if (rdma_get_cm_event(conn->ec, &event) == 0) {
+    if (rdma_get_cm_event(g_ec, &event) == 0) {
         struct rdma_cm_event event_copy;
         memcpy(&event_copy, event, sizeof(*event));
         rdma_ack_cm_event(event);
@@ -334,22 +335,35 @@ void rdmacli_run(void)
     rdmacli_event_init();
 
     while(g_ctrl->start == 0);
-    fprintf(stdout, "Starting test ...\n");
+    fprintf(stdout, "[%d] Starting test ...\n", g_slave_id);
+    if (g_conf->num_ips == 0 && g_conf->ipmap[g_slave_id].available == 0) {
+        fprintf(stdout, "[%d] no ipmap defined. in lazy loop\n", g_slave_id);
+        while (g_ctrl->stop == 0)
+            sleep(10);
+        fprintf(stdout, "[%d] Exiting worker %d from lazy loop.\n", g_slave_id, g_slave_id);
+        return;
+    }
 
     snprintf(dst_port, 63, "%d", g_conf->port + g_slave_id);
     TEST_NZ(getaddrinfo(g_conf->host, dst_port, NULL, &addr));
+
+    TEST_Z(g_ec = rdma_create_event_channel());
+    TEST_NZ(fcntl(g_ec->fd, F_SETFL, fcntl(g_ec->fd, F_GETFL) | O_NONBLOCK));
+    g_ec_event_opaque = rdmacli_add_event(g_ec->fd, NULL, rdmacli_handle_ec_events);
 
     for (i = 0; i < g_conf->num_qp; i++) {
         char cliip[64];
         conns[i] = malloc(sizeof(struct rdma_connection));
         memset(conns[i], 0, sizeof(struct rdma_connection));
         conns[i]->conf = g_conf;
-        TEST_Z(conns[i]->ec = rdma_create_event_channel());
+        conns[i]->ec = g_ec;
         TEST_NZ(rdma_create_id(conns[i]->ec, &conns[i]->id, conns[i], RDMA_PS_TCP));
-        TEST_NZ(fcntl(conns[i]->ec->fd, F_SETFL, fcntl(conns[i]->ec->fd, F_GETFL) | O_NONBLOCK));
-        conns[i]->ec_event_opaque = rdmacli_add_event(conns[i]->ec->fd, (void *)conns[i], rdmacli_handle_ec_events);
-        sprintf(cliip, "%s", increment_ip(g_conf->client_start, i % g_conf->num_ips));
-        fprintf(stdout, "conn id: %d source IP: %s\n", i, cliip);
+        if (g_conf->num_ips == 0 && g_conf->ipmap[g_slave_id].available == 1) {
+            strcpy(cliip, g_conf->ipmap[g_slave_id].ip);
+        } else {
+            sprintf(cliip, "%s", increment_ip(g_conf->client_start, (g_slave_id + (g_conf->num_worker * i)) % g_conf->num_ips));
+        }
+        fprintf(stdout, "[%d] conn id: %d source IP: %s\n", g_slave_id, i, cliip);
         TEST_NZ(getaddrinfo(cliip, NULL, NULL, &cliaddr));
         TEST_NZ(rdma_resolve_addr(conns[i]->id, cliaddr->ai_addr, addr->ai_addr, 500));
     }
@@ -357,7 +371,9 @@ void rdmacli_run(void)
     while(g_ctrl->stop == 0)
         rdmacli_handle_event();
 
-    fprintf(stdout, "Exiting worker %d\n", g_slave_id);
+    fprintf(stdout, "[%d] Exiting worker %d\n", g_slave_id, g_slave_id);
+
+    rdmacli_del_event(g_ec_event_opaque);
 
     for (i = 0; i < g_conf->num_qp; i++) {
         free(conns[i]);

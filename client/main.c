@@ -22,15 +22,34 @@ static void signal_handler(int sig)
     }
 }
 
+static void parse_ipmap(char *str)
+{
+    char delim[] = ";";
+    char *ptr = strtok(str, delim);
+
+    while (ptr != NULL) {
+        char *tmp = malloc(strlen(ptr) + 1);
+        int slave;
+        unsigned a, b, c, d;
+        strcpy(tmp, ptr);
+        sscanf(tmp, "%d@%u.%u.%u.%u", &slave, &a, &b, &c, &d);
+        sprintf(g_conf->ipmap[slave].ip, "%u.%u.%u.%u", a, b, c, d);
+        g_conf->ipmap[slave].available = 1;
+        fprintf(stdout, "ipmap :: slave %d ip: %s\n", slave, g_conf->ipmap[slave].ip);
+        free(tmp);
+        ptr = strtok(NULL, delim);
+    }
+}
+
 int main(int argc, char **argv)
 {
-    int i, opt, port, buffer_size, num_qp, num_worker, mode, stat_interval, duration, loop, num_ips;
-    char host[64], client_start[64];
+    int i, opt, port, buffer_size, num_qp, num_worker, mode, stat_interval, duration, loop, num_ips = 0;
+    char host[64], client_start[64], *ipmap_str = NULL;
     pid_t pids[RDMASRV_MAX_WORKER];
 	int total_duration = 0;
     unsigned long prev_rx_tr = 0, prev_tx_tr = 0, prev_rx_b = 0, prev_tx_b = 0;
 
-    while((opt = getopt(argc, argv, "p:h:b:q:w:s:i:d:l:c:n:")) != -1) {
+    while((opt = getopt(argc, argv, "p:h:b:q:w:s:i:d:l:c:n:m:")) != -1) {
         switch (opt) {
             case 'p':
                 port = atoi(optarg);
@@ -65,8 +84,12 @@ int main(int argc, char **argv)
             case 'n':
                 num_ips = atoi(optarg);
                 break;
+            case 'm':
+                ipmap_str = malloc(strlen(optarg) + 1);
+                strcpy(ipmap_str, optarg);
+                break;
             default:
-                fprintf(stderr, "client -p <port> -h <destination IP> -b <buffer size> -q <num of queue pairs> -w <workers> -s <0: passive read 1: passive write 2: active read 3: active write> -i <stats interval> -d <duration> -l <loop 0: infinite> -c <start client IP> -n <number of client IPs>\n");
+                fprintf(stderr, "client -p <port> -h <destination IP> -b <buffer size> -q <num of queue pairs> -w <workers> -s <0: passive read 1: passive write 2: active read 3: active write> -i <stats interval> -d <duration> -l <loop 0: infinite> -c <start client IP> -n <number of client IPs> -m <ip map>\n");
                 exit(100);
         }
     }
@@ -101,8 +124,11 @@ int main(int argc, char **argv)
         g_conf->duration = duration;
         g_conf->loop = loop;
         strcpy(g_conf->host, host);
-        strcpy(g_conf->client_start, client_start);
         g_conf->num_ips = num_ips;
+        if (num_ips)
+            strcpy(g_conf->client_start, client_start);
+        if (ipmap_str)
+            parse_ipmap(ipmap_str);
     }
 
     g_ctrl->stop = 0;
