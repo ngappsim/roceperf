@@ -53,9 +53,6 @@ struct rdmacli_conf {
     int port;
     int buffer_size;
     int num_qp;
-//    struct {
-//        int num_qp;
-//    } qp[RDMACLI_MAX_WORKER];
     int num_worker;
     rdmacli_mode mode;
     int stat_interval;
@@ -65,8 +62,8 @@ struct rdmacli_conf {
     char client_start[RDMACLI_MAX_IP_STR_LEN];
     int num_ips;
     struct {
-        char ip[RDMACLI_MAX_IP_STR_LEN];
-        int available;
+        char ip[RDMACLI_MAX_IP_PER_WORKER][RDMACLI_MAX_IP_STR_LEN];
+        int num_ips;
     } ipmap[RDMACLI_MAX_WORKER];
 };
 

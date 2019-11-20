@@ -11,6 +11,8 @@ ucm_major=231
 umad_major=231
 uverbs_major=231
 
+echo "Creating issmX, ucmX, umadX, uverbsX ..."
+
 a=0
 while [ $a -lt $numdev ]
 do
@@ -23,6 +25,8 @@ do
     mknod /dev/infiniband/uverbs$a c 231 $uverbs_minor
     a=`expr $a + 1`
 done
+
+echo "DONE"
 
 #mknod /dev/infiniband/issm0 c 231 64
 #mknod /dev/infiniband/issm1 c 231 65
@@ -108,6 +112,8 @@ done
 #mknod /dev/infiniband/uverbs18 c 231 210
 #mknod /dev/infiniband/uverbs19 c 231 211
 
+echo "Inserting modules ..."
+
 cd /shared/port/roce/linux_3.10
 insmod udp_tunnel.ko
 insmod ib_core.ko
@@ -122,6 +128,8 @@ insmod umem.ko
 insmod rdmavt.ko
 insmod ib_ipoib.ko
 insmod rdma_rxe.ko
+
+echo "DONE"
 
 #echo ixint1 > /sys/module/rdma_rxe/parameters/add
 #echo ixint2 >> /sys/module/rdma_rxe/parameters/add
@@ -144,6 +152,8 @@ insmod rdma_rxe.ko
 #echo ixint19 >> /sys/module/rdma_rxe/parameters/add
 #echo ixint20 >> /sys/module/rdma_rxe/parameters/add
 
+echo "Adding devices ..."
+
 a=0
 while [ $a -lt $numdev ]
 do
@@ -154,6 +164,8 @@ do
     fi
     a=`expr $a + 1`
 done
+
+echo "DONE"
 
 echo "export LD_LIBRARY_PATH=.:/shared/port/roce/host"
 echo "./client -p 5555 -h 67.67.0.101 -b 20000 -q 1 -w 8 -s 2 -i 20 -d 60 -l 0 -c 67.67.0.1 -n 10"

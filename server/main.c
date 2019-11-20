@@ -32,9 +32,9 @@ int main(int argc, char **argv)
 {
     pid_t pids[RDMASRV_MAX_WORKER];
     int opt, i;
-    unsigned long prev_rx_tr = 0, prev_tx_tr = 0, prev_rx_b = 0, prev_tx_b = 0;
+    unsigned long prev_rx_tr = 0, prev_tx_tr = 0, prev_rx_b = 0, prev_tx_b = 0, mask = 0;
 
-    while((opt = getopt(argc, argv, "p:b:q:w:s:i:l:")) != -1) {
+    while((opt = getopt(argc, argv, "p:b:q:w:s:i:l:m:")) != -1) {
         switch (opt) {
             case 'p':
                 g_port = atoi(optarg);
@@ -56,6 +56,9 @@ int main(int argc, char **argv)
                 break;
             case 'l':
                 g_loop = atoi(optarg);
+                break;
+            case 'm':
+                mask = strtol(optarg, NULL, 16);
                 break;
             default:
                 fprintf(stderr, "server -p <start port> -b <buffer size> -q <number of queue pairs per connections> -w <number of workers> -s <0: passive read, 1: passive write, 2: active read, 3: active write> -i <stat interval>\n");
@@ -85,7 +88,10 @@ int main(int argc, char **argv)
     memset(g_stats, 0, sizeof(struct rdmasrv_stat));
 
     for (i = 0; i < g_num_worker; i ++) {
-        pid_t pid = fork();
+        pid_t pid;
+        if (mask && ((mask & (1 << i)) == 0))
+            continue;
+        pid = fork();
         if (pid == 0) {
             cpu_set_t set;
             CPU_ZERO(&set);

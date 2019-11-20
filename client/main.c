@@ -22,22 +22,45 @@ static void signal_handler(int sig)
     }
 }
 
+static void parse_ipmap_substr(int slave, char *str)
+{
+    char delim[] = ",";
+    char *ptr = strtok(str, delim);
+
+    g_conf->ipmap[slave].num_ips = 0;
+
+    while(ptr != NULL) {
+        strcpy(g_conf->ipmap[slave].ip[g_conf->ipmap[slave].num_ips++], ptr);
+        ptr = strtok(NULL, delim);
+    }
+}
+
 static void parse_ipmap(char *str)
 {
     char delim[] = ";";
     char *ptr = strtok(str, delim);
+    char *tmp[RDMACLI_MAX_WORKER];
+    int i;
+
+    for (i = 0; i < RDMACLI_MAX_WORKER; i++)
+        tmp[i] = NULL;
 
     while (ptr != NULL) {
-        char *tmp = malloc(strlen(ptr) + 1);
+        char *_tmp = malloc(strlen(ptr) + 1);
         int slave;
-        unsigned a, b, c, d;
-        strcpy(tmp, ptr);
-        sscanf(tmp, "%d@%u.%u.%u.%u", &slave, &a, &b, &c, &d);
-        sprintf(g_conf->ipmap[slave].ip, "%u.%u.%u.%u", a, b, c, d);
-        g_conf->ipmap[slave].available = 1;
-        fprintf(stdout, "ipmap :: slave %d ip: %s\n", slave, g_conf->ipmap[slave].ip);
-        free(tmp);
+        sscanf(ptr, "%d@%s", &slave, _tmp);
+        tmp[slave] = malloc(strlen(_tmp) + 1);
+        strcpy(tmp[slave], _tmp);
+        free(_tmp);
         ptr = strtok(NULL, delim);
+    }
+
+    for (i = 0; i < RDMACLI_MAX_WORKER; i++) {
+        if (tmp[i] == NULL)
+            continue;
+        fprintf(stdout, "map str %s slave %d\n", tmp[i], i);
+        parse_ipmap_substr(i, tmp[i]);
+        free(tmp[i]);
     }
 }
 
@@ -115,6 +138,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "Failed to allocate conf.\n");
         exit(-4);
     } else {
+        memset(g_conf, 0, sizeof(struct rdmacli_conf));
         g_conf->port = port;
         g_conf->buffer_size = buffer_size;
         g_conf->num_qp = num_qp;
@@ -127,8 +151,10 @@ int main(int argc, char **argv)
         g_conf->num_ips = num_ips;
         if (num_ips)
             strcpy(g_conf->client_start, client_start);
-        if (ipmap_str)
+        if (ipmap_str) {
             parse_ipmap(ipmap_str);
+            free(ipmap_str);
+        }
     }
 
     g_ctrl->stop = 0;

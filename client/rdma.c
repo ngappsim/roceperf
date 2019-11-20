@@ -215,6 +215,7 @@ static void rdmacli_on_route_resolved(struct rdma_cm_id *id)
     memset(&cm_params, 0, sizeof(cm_params));
     cm_params.initiator_depth = cm_params.responder_resources = 1;
     cm_params.rnr_retry_count = 7;
+    cm_params.retry_count = 7;
     TEST_NZ(rdma_connect(id, &cm_params));
 }
 
@@ -336,7 +337,7 @@ void rdmacli_run(void)
 
     while(g_ctrl->start == 0);
     fprintf(stdout, "[%d] Starting test ...\n", g_slave_id);
-    if (g_conf->num_ips == 0 && g_conf->ipmap[g_slave_id].available == 0) {
+    if (g_conf->num_ips == 0 && g_conf->ipmap[g_slave_id].num_ips == 0) {
         fprintf(stdout, "[%d] no ipmap defined. in lazy loop\n", g_slave_id);
         while (g_ctrl->stop == 0)
             sleep(10);
@@ -358,8 +359,9 @@ void rdmacli_run(void)
         conns[i]->conf = g_conf;
         conns[i]->ec = g_ec;
         TEST_NZ(rdma_create_id(conns[i]->ec, &conns[i]->id, conns[i], RDMA_PS_TCP));
-        if (g_conf->num_ips == 0 && g_conf->ipmap[g_slave_id].available == 1) {
-            strcpy(cliip, g_conf->ipmap[g_slave_id].ip);
+        if (g_conf->num_ips == 0 && g_conf->ipmap[g_slave_id].num_ips > 0) {
+            int ipindex = i % g_conf->ipmap[g_slave_id].num_ips;
+            strcpy(cliip, g_conf->ipmap[g_slave_id].ip[ipindex]);
         } else {
             sprintf(cliip, "%s", increment_ip(g_conf->client_start, (g_slave_id + (g_conf->num_worker * i)) % g_conf->num_ips));
         }

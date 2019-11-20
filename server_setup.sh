@@ -23,6 +23,5 @@ insmod rdma_rxe.ko
 
 echo ixint1 > /sys/module/rdma_rxe/parameters/add
 
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/shared/port/roce/host
-cd ..
-./server -p 5555 -b 20000 -q 1 -w 8 -s 0 -i 20
+echo "export LD_LIBRARY_PATH=.:/shared/port/roce/host"
+echo "./server -p 5555 -b 20000 -q 1 -w 8 -s 0 -i 20"
