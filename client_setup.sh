@@ -16,12 +16,12 @@ echo "Creating issmX, ucmX, umadX, uverbsX ..."
 a=0
 while [ $a -lt $numdev ]
 do
-    issm_minor=`expr $a + 64`
+    issm_minor=`expr $a + 128`
     mknod /dev/infiniband/issm$a c 231 $issm_minor
-    ucm_minor=`expr $a + 224`
+    ucm_minor=`expr $a + 384`
     mknod /dev/infiniband/ucm$a c 231 $ucm_minor
     mknod /dev/infiniband/umad$a c 231 $a
-    uverbs_minor=`expr $a + 192`
+    uverbs_minor=`expr $a + 256`
     mknod /dev/infiniband/uverbs$a c 231 $uverbs_minor
     a=`expr $a + 1`
 done

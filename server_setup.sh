@@ -1,10 +1,10 @@
 mkdir /dev/infiniband
 
 mknod /dev/infiniband/rdma_cm c 10 254
-mknod /dev/infiniband/issm0 c 231 64
-mknod /dev/infiniband/ucm0 c 231 224
+mknod /dev/infiniband/issm0 c 231 128
+mknod /dev/infiniband/ucm0 c 231 384
 mknod /dev/infiniband/umad0 c 231 0
-mknod /dev/infiniband/uverbs0 c 231 192
+mknod /dev/infiniband/uverbs0 c 231 256
 
 cd /shared/port/roce/linux_3.10
 insmod udp_tunnel.ko
