@@ -167,7 +167,7 @@ int main(int argc, char **argv)
         if (pid == 0) {
             cpu_set_t set;
             CPU_ZERO(&set);
-            CPU_SET(i + 1, &set);
+            CPU_SET(i, &set);
             sched_setaffinity(getpid(), sizeof(set), &set);
             g_slave_id = i;
             rdmacli_run();

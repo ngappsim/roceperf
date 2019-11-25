@@ -16,13 +16,14 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <errno.h>
 
 #define TEST_NZ(x) do { if ( (x)) die("error: " #x " failed (returned non-zero)." ); } while (0)
 #define TEST_Z(x)  do { if (!(x)) die("error: " #x " failed (returned zero/null)."); } while (0)
 
 static inline void die(const char *reason)
 {
-    fprintf(stderr, "%s\n", reason);
+    fprintf(stderr, "%s(%s)\n", reason, strerror(errno));
     exit(EXIT_FAILURE);
 }
 

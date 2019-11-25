@@ -157,10 +157,11 @@ echo "Adding devices ..."
 a=0
 while [ $a -lt $numdev ]
 do
+    x=`expr $a + 1`
     if [ $a -eq 0 ]; then
-        echo ixint$a > /sys/module/rdma_rxe/parameters/add
+        echo ixint$x > /sys/module/rdma_rxe/parameters/add
     else
-        echo ixint$a >> /sys/module/rdma_rxe/parameters/add
+        echo ixint$x >> /sys/module/rdma_rxe/parameters/add
     fi
     a=`expr $a + 1`
 done

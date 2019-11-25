@@ -95,7 +95,7 @@ int main(int argc, char **argv)
         if (pid == 0) {
             cpu_set_t set;
             CPU_ZERO(&set);
-            CPU_SET(i + 1, &set);
+            CPU_SET(i, &set);
             sched_setaffinity(getpid(), sizeof(set), &set);
             g_slave_id = i;
             rdmasrv_run(g_port + i, g_buffer_size, g_num_qp, g_send, g_loop);
