@@ -49,8 +49,11 @@ static inline void post_send(struct rdma_connection *conn)
 
 static inline void post_send_mr(struct rdma_connection *conn)
 {
+    int i;
     conn->send_msg->type = MSG_MR;
-    memcpy(&conn->send_msg->data.mr, conn->rdma_local_mr, sizeof(struct ibv_mr));
+    conn->send_msg->mr_num = conn->conf->ring_size;
+    for (i = 0; i < conn->conf->ring_size; i ++)
+        memcpy(&conn->send_msg->mr[i], conn->r_elem[i].rdma_local_mr, sizeof(struct ibv_mr));
     post_send(conn);
 }
 
@@ -60,35 +63,75 @@ static inline void post_send_done(struct rdma_connection *conn)
     post_send(conn);
 }
 
-static inline void post_read_write(struct rdma_connection *conn, enum ibv_wr_opcode opcode)
+static inline int post_read_write(struct rdma_connection *conn, enum ibv_wr_opcode opcode, int idx)
 {
     struct ibv_send_wr wr, *bad_wr = NULL;
     struct ibv_sge sge;
 
     memset(&wr, 0, sizeof(wr));
-    wr.wr_id = (uintptr_t)conn;
+    wr.wr_id = (uintptr_t)&conn->r_elem[idx];
     wr.opcode = opcode;
     wr.sg_list = &sge;
     wr.num_sge = 1;
     wr.send_flags = IBV_SEND_SIGNALED;
-    wr.wr.rdma.remote_addr = (uintptr_t)conn->peer_mr.addr;
-    wr.wr.rdma.rkey = conn->peer_mr.rkey;
+    wr.wr.rdma.remote_addr = (uintptr_t)conn->r_elem[idx].peer_mr.addr;
+    wr.wr.rdma.rkey = conn->r_elem[idx].peer_mr.rkey;
 
-    sge.addr = (uintptr_t)conn->rdma_local_region;
+    sge.addr = (uintptr_t)conn->r_elem[idx].rdma_local_region;
     sge.length = conn->conf->buffer_size;
-    sge.lkey = conn->rdma_local_mr->lkey;
+    sge.lkey = conn->r_elem[idx].rdma_local_mr->lkey;
 
-    TEST_NZ(ibv_post_send(conn->qp, &wr, &bad_wr));
+    //fprintf(stdout, "[%d] posting read / write for idx %d\n", g_slave_id, idx);
+
+    return ibv_post_send(conn->qp, &wr, &bad_wr);
 }
 
-static inline void post_read(struct rdma_connection *conn)
+static inline int post_read(struct rdma_connection *conn)
 {
-    post_read_write(conn, IBV_WR_RDMA_READ);
+    int i, cnt = 0;
+
+    for (i = 0; i < conn->conf->ring_size; i++) {
+        if (conn->r_elem[i].free) {
+            int ret = post_read_write(conn, IBV_WR_RDMA_READ, i);
+            if (ret) {
+                if (ret != -ENOMEM)
+                    fprintf(stderr, "post_read_write() returned %d errno: %s\n", ret, strerror(errno));
+                conn->r_elem[i].free = 1;
+                //fprintf(stdout, "[1] Posted %d read requests.\n", cnt);
+                return cnt;
+            } else {
+                cnt ++;
+                conn->r_elem[i].free = 0;
+                conn->r_elem_free --;
+            }
+        }
+    }
+
+    //fprintf(stdout, "[2] Posted %d read requests.\n", cnt);
+    return cnt;
 }
 
-static inline void post_write(struct rdma_connection *conn)
+static inline int post_write(struct rdma_connection *conn)
 {
-    post_read_write(conn, IBV_WR_RDMA_WRITE);
+    int i, cnt = 0;
+
+    for (i = 0; i < conn->conf->ring_size; i++) {
+        if (conn->r_elem[i].free) {
+            int ret = post_read_write(conn, IBV_WR_RDMA_WRITE, i);
+            if (ret) {
+                if (ret != -ENOMEM)
+                    fprintf(stderr, "post_read_write() returned %d errno: %s\n", ret, strerror(errno));
+                conn->r_elem[i].free = 1;
+                return cnt;
+            } else {
+                cnt ++;
+                conn->r_elem[i].free = 0;
+                conn->r_elem_free --;
+            }
+        }
+    }
+
+    return cnt;
 }
 
 static void rdmacli_handle_cc_events(void *data, int event)
@@ -109,22 +152,37 @@ static void rdmacli_handle_cc_events(void *data, int event)
             //fprintf(stdout, "Received cc opcode: %d\n", wc.opcode);
             if (wc.opcode & IBV_WC_RECV) {
                 if (conn->recv_msg->type == MSG_MR) {
+                    g_stats[g_slave_id].msg_mr_rx ++;
                     if ((conn->conf->mode == ACTIVE_WRITE || 
                             conn->conf->mode == ACTIVE_READ) && conn->state == CONN_CONNECTED) {
-                        memcpy(&conn->peer_mr, &conn->recv_msg->data.mr, sizeof(conn->peer_mr));
+                        int i;
+                        if (conn->recv_msg->mr_num > MAX_RING_SIZE) {
+                            fprintf(stderr, "[%d] conn->recv_msg->mr_num(%u) > MAX_RING_SIZE\n", g_slave_id, conn->recv_msg->mr_num);
+                            continue;
+                        }
+
+                        if (conn->recv_msg->mr_num != conn->conf->ring_size) {
+                            fprintf(stderr, "[%d] Server and client configured with different ring size. server %u client %u. Dying.\n", g_slave_id, conn->recv_msg->mr_num, conn->conf->ring_size);
+                            exit(0);
+                        }
+                        for (i = 0; i < conn->recv_msg->mr_num; i ++) {
+                            memcpy(&conn->r_elem[i].peer_mr, &conn->recv_msg->mr[i], sizeof(struct ibv_mr));
+                        }
                         conn->state = CONN_CONNECTED_MR_RECEIVED;
+                        ++conn->loop;
                         if (conn->conf->mode == ACTIVE_READ) {
-                        fprintf(stdout, "[%d] %s:%d Posting READ.\n", g_slave_id, __func__, __LINE__);
-                            post_read(conn);
+                            fprintf(stdout, "[%d] %s:%d Posting READ.\n", g_slave_id, __func__, __LINE__);
+                            g_stats[g_slave_id].read_attempt += post_read(conn);
                         } else {
-                        fprintf(stdout, "[%d] %s:%d Posting WRITE.\n", g_slave_id, __func__, __LINE__);
-                            post_write(conn);
+                            fprintf(stdout, "[%d] %s:%d Posting WRITE.\n", g_slave_id, __func__, __LINE__);
+                            g_stats[g_slave_id].write_attempt += post_write(conn);
                         }
                     } else {
                         fprintf(stderr, "[%d] Recieved MR in wrong state.\n", g_slave_id);
                         continue;
                     }
                 } else if (conn->recv_msg->type == MSG_DONE) {
+                    g_stats[g_slave_id].msg_done_rx ++;
                     if ((conn->conf->mode == PASSIVE_READ ||
                              conn->conf->mode == PASSIVE_WRITE) && conn->state == CONN_CONNECTED_MR_SENT) {
                         rdma_disconnect(conn->id);
@@ -135,35 +193,55 @@ static void rdmacli_handle_cc_events(void *data, int event)
                     }
                 }
             } else if (wc.opcode & IBV_WC_RDMA_READ) {
+                g_stats[g_slave_id].read_success ++;
                 if (conn->conf->mode == ACTIVE_READ && 
                     (conn->state == CONN_CONNECTED_MR_RECEIVED || conn->state == CONN_CONNECTED_OPS_COMPLETED)) {
+                    struct rdma_rqring_elem *elem = (struct rdma_rqring_elem *) wc.wr_id;
+                    elem->free = 1;
+                    conn->r_elem_free ++;
+                    if (conn->r_elem_free > conn->conf->ring_size) {
+                        die("conn->r_elem_free > conn->ring_size\n");
+                    }
+                    //fprintf(stdout, "Got ACK for element index %lu\n", (((uint64_t) elem) - ((uint64_t) conn->r_elem)) / sizeof(struct rdma_rqring_elem));
                     conn->state = CONN_CONNECTED_OPS_COMPLETED;
-                    ++conn->loop;
                     if (conn->conf->loop && conn->loop >= conn->conf->loop) {
-                        fprintf(stdout, "[%d] %s:%d Sending DONE.\n", g_slave_id, __func__, __LINE__);
-                        post_send_done(conn);
+                        if (conn->r_elem_free == conn->conf->ring_size) {
+                            fprintf(stdout, "[%d] %s:%d Sending DONE.\n", g_slave_id, __func__, __LINE__);
+                            post_send_done(conn);
+                        }
                     } else {
                         //fprintf(stdout, "%s:%d Posting READ.\n", __func__, __LINE__);
-                        post_read(conn);
+                        ++conn->loop;
+                        g_stats[g_slave_id].read_attempt += post_read(conn);
                     }
                 } else {
                     fprintf(stderr, "[%d] Recieved WC_RDMA_READ in wrong state.\n", g_slave_id);
                     continue;
                 }
             } else if (wc.opcode & IBV_WC_RDMA_WRITE) {
+                g_stats[g_slave_id].write_success ++;
                 if (conn->conf->mode == ACTIVE_WRITE && 
-                    (conn->state == CONN_CONNECTED || conn->state == CONN_CONNECTED_OPS_COMPLETED)) {
+                    (conn->state == CONN_CONNECTED_MR_RECEIVED || conn->state == CONN_CONNECTED_OPS_COMPLETED)) {
+                    struct rdma_rqring_elem *elem = (struct rdma_rqring_elem *) wc.wr_id;
+                    elem->free = 1;
+                    conn->r_elem_free ++;
+                    if (conn->r_elem_free > conn->conf->ring_size) {
+                        die("conn->r_elem_free > conn->ring_size\n");
+                    }
+                    //fprintf(stdout, "Got ACK for element index %lu\n", (((uint64_t) elem) - ((uint64_t) conn->r_elem)) / sizeof(struct rdma_rqring_elem));
                     conn->state = CONN_CONNECTED_OPS_COMPLETED;
-                    ++conn->loop;
-                    if (conn->loop >= conn->conf->loop) {
-                        fprintf(stdout, "[%d] %s:%d Sending DONE.\n", g_slave_id, __func__, __LINE__);
-                        post_send_done(conn);
+                    if (conn->conf->loop && conn->loop >= conn->conf->loop) {
+                        if (conn->r_elem_free == conn->conf->ring_size) {
+                            fprintf(stdout, "[%d] %s:%d Sending DONE.\n", g_slave_id, __func__, __LINE__);
+                            post_send_done(conn);
+                        }
                     } else {
+                        ++conn->loop;
                         //fprintf(stdout, "%s:%d Posting WRITE.\n", __func__, __LINE__);
-                        post_write(conn);
+                        g_stats[g_slave_id].write_attempt += post_write(conn);
                     }
                 } else {
-                    fprintf(stderr, "[%d] Recieved WC_RDMA_WRITE in wrong state.\n", g_slave_id);
+                    fprintf(stderr, "[%d] Recieved WC_RDMA_WRITE in wrong state. conn->conf->mode: %d conn->state: %d\n", g_slave_id, conn->conf->mode, conn->state);
                     continue;
                 }
             } else {
@@ -172,8 +250,10 @@ static void rdmacli_handle_cc_events(void *data, int event)
                     fprintf(stdout, "[%d] %s:%d Posting recvs.\n", g_slave_id, __func__, __LINE__);
                     post_receives(conn);
                     conn->state = CONN_CONNECTED_MR_SENT;
+                    g_stats[g_slave_id].msg_mr_tx ++;
                 } else if ((conn->conf->mode == ACTIVE_WRITE ||
                        conn->conf->mode == ACTIVE_READ) && conn->state == CONN_CONNECTED_OPS_COMPLETED) {
+                    g_stats[g_slave_id].msg_done_tx ++;
                     rdma_disconnect(conn->id);
                     conn->state = CONN_DISCONNECTING;
                 } else {
@@ -188,14 +268,17 @@ static void rdmacli_handle_cc_events(void *data, int event)
 static void rdmacli_on_disconnected(struct rdma_cm_id *id)
 {
     struct rdma_connection *conn = id->context;
+    int i;
     rdmacli_del_event(conn->cc_event_opaque);
     rdma_destroy_qp(conn->id);
     ibv_dereg_mr(conn->send_msg_mr);
     ibv_dereg_mr(conn->recv_msg_mr);
-    ibv_dereg_mr(conn->rdma_local_mr);
+    for (i = 0; i < conn->conf->ring_size; i ++) {
+        ibv_dereg_mr(conn->r_elem[i].rdma_local_mr);
+        free(conn->r_elem[i].rdma_local_region);
+    }
     free(conn->send_msg);
     free(conn->recv_msg);
-    free(conn->rdma_local_region);
     rdma_destroy_id(conn->id);
 }
 
@@ -224,6 +307,7 @@ static void rdmacli_on_addr_resolved(struct rdma_cm_id *id)
     struct rdma_connection *conn = id->context;
     unsigned rdma_local_mr_flag = 0; 
     struct ibv_qp_init_attr qp_attr;
+    int i;
 
     /* build context */
     conn->ctx = id->verbs;
@@ -252,7 +336,10 @@ static void rdmacli_on_addr_resolved(struct rdma_cm_id *id)
     /* init mr */
     conn->send_msg = malloc(sizeof(struct message));
     conn->recv_msg = malloc(sizeof(struct message));
-    conn->rdma_local_region = malloc(conn->conf->buffer_size);
+    for (i = 0; i < conn->conf->ring_size; i ++) {
+        conn->r_elem[i].rdma_local_region = malloc(conn->conf->buffer_size);
+        conn->r_elem[i].free = 1;
+    }
 
     if (conn->conf->mode == PASSIVE_READ) {
         rdma_local_mr_flag = IBV_ACCESS_REMOTE_READ;
@@ -265,7 +352,10 @@ static void rdmacli_on_addr_resolved(struct rdma_cm_id *id)
     }
     TEST_Z(conn->send_msg_mr = ibv_reg_mr(conn->pd, conn->send_msg, sizeof(struct message), 0));
     TEST_Z(conn->recv_msg_mr = ibv_reg_mr(conn->pd, conn->recv_msg, sizeof(struct message), IBV_ACCESS_LOCAL_WRITE));
-    TEST_Z(conn->rdma_local_mr = ibv_reg_mr(conn->pd, conn->rdma_local_region, conn->conf->buffer_size, rdma_local_mr_flag));
+    for (i = 0; i < conn->conf->ring_size; i ++) {
+        TEST_Z(conn->r_elem[i].rdma_local_mr = ibv_reg_mr(conn->pd, conn->r_elem[i].rdma_local_region, conn->conf->buffer_size, rdma_local_mr_flag | (1 << 7)));
+    }
+    conn->r_elem_free = conn->conf->ring_size;
 
     /* Add CQ fd to poll event */
     TEST_NZ(fcntl(conn->comp_channel->fd, F_SETFL, fcntl(conn->comp_channel->fd, F_GETFL) | O_NONBLOCK));

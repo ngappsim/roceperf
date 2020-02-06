@@ -37,6 +37,14 @@ struct rdmacli_stat {
     unsigned long rx_transactions;
     unsigned long txbytes;
     unsigned long rxbytes;
+    unsigned long msg_mr_tx;
+    unsigned long msg_mr_rx;
+    unsigned long msg_done_tx;
+    unsigned long msg_done_rx;
+    unsigned long write_attempt;
+    unsigned long write_success;
+    unsigned long read_attempt;
+    unsigned long read_success;
 };
 
 typedef enum {
@@ -62,6 +70,7 @@ struct rdmacli_conf {
     char host[RDMACLI_MAX_IP_STR_LEN];
     char client_start[RDMACLI_MAX_IP_STR_LEN];
     int num_ips;
+    int ring_size;
     struct {
         char ip[RDMACLI_MAX_IP_PER_WORKER][RDMACLI_MAX_IP_STR_LEN];
         int num_ips;

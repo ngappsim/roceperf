@@ -31,10 +31,10 @@ static void signal_handler(int sig)
 int main(int argc, char **argv)
 {
     pid_t pids[RDMASRV_MAX_WORKER];
-    int opt, i;
+    int opt, i, ring_size;
     unsigned long prev_rx_tr = 0, prev_tx_tr = 0, prev_rx_b = 0, prev_tx_b = 0, mask = 0;
 
-    while((opt = getopt(argc, argv, "p:b:q:w:s:i:l:m:")) != -1) {
+    while((opt = getopt(argc, argv, "p:b:q:w:s:i:l:m:r:")) != -1) {
         switch (opt) {
             case 'p':
                 g_port = atoi(optarg);
@@ -60,8 +60,11 @@ int main(int argc, char **argv)
             case 'm':
                 mask = strtol(optarg, NULL, 16);
                 break;
+            case 'r':
+                ring_size = atoi(optarg);
+                break;
             default:
-                fprintf(stderr, "server -p <start port> -b <buffer size> -q <number of queue pairs per connections> -w <number of workers> -s <0: passive read, 1: passive write, 2: active read, 3: active write> -i <stat interval>\n");
+                fprintf(stderr, "server -p <start port> -b <buffer size> -q <number of queue pairs per connections> -w <number of workers> -s <0: passive read, 1: passive write, 2: active read, 3: active write> -i <stat interval> -r <ring size>\n");
                 exit(-1);
         }
     }
@@ -98,7 +101,7 @@ int main(int argc, char **argv)
             CPU_SET(i, &set);
             sched_setaffinity(getpid(), sizeof(set), &set);
             g_slave_id = i;
-            rdmasrv_run(g_port + i, g_buffer_size, g_num_qp, g_send, g_loop);
+            rdmasrv_run(g_port + i, g_buffer_size, g_num_qp, g_send, g_loop, ring_size);
             return 0;
         } else if (pid > 0) {
             pids[i] = pid;
@@ -119,6 +122,36 @@ int main(int argc, char **argv)
         fprintf(stdout, "RX Transactions: %u Rate: %lf\n", total_rx_tr, (double)((total_rx_tr - prev_rx_tr) / g_stat_interval));
         fprintf(stdout, "RX Bytes: %u Rate: %lf Gbps\n", total_rx_b, (double)((double)((total_rx_b - prev_rx_b) / g_stat_interval) / 1000000000));
         fprintf(stdout, "TX Bytes: %u Rate: %lf Gbps\n", total_tx_b, (double)((double)((total_tx_b - prev_tx_b) / g_stat_interval) / 1000000000));
+        fprintf(stdout, "msg_mr_tx:\t");
+        for (i = 0; i < g_num_worker; i++) {
+            fprintf(stdout, "\t%lu", g_stats[i].msg_mr_tx);
+        }
+        fprintf(stdout, "\n");
+        fprintf(stdout, "msg_mr_rx:\t");
+        for (i = 0; i < g_num_worker; i++) {
+            fprintf(stdout, "\t%lu", g_stats[i].msg_mr_rx);
+        }
+        fprintf(stdout, "\n");
+        fprintf(stdout, "msg_done_tx:\t");
+        for (i = 0; i < g_num_worker; i++) {
+            fprintf(stdout, "\t%lu", g_stats[i].msg_done_tx);
+        }
+        fprintf(stdout, "\n");
+        fprintf(stdout, "msg_done_rx:\t");
+        for (i = 0; i < g_num_worker; i++) {
+            fprintf(stdout, "\t%lu", g_stats[i].msg_done_rx);
+        }
+        fprintf(stdout, "\n");
+        fprintf(stdout, "write:\t");
+        for (i = 0; i < g_num_worker; i++) {
+            fprintf(stdout, "\t%lu", g_stats[i].write);
+        }
+        fprintf(stdout, "\n");
+        fprintf(stdout, "read:\t");
+        for (i = 0; i < g_num_worker; i++) {
+            fprintf(stdout, "\t%lu", g_stats[i].read);
+        }
+        fprintf(stdout, "\n");
         prev_rx_tr = total_rx_tr;
         prev_tx_tr = total_tx_tr;
         prev_rx_b = total_rx_b;

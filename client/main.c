@@ -66,13 +66,13 @@ static void parse_ipmap(char *str)
 
 int main(int argc, char **argv)
 {
-    int i, opt, port, buffer_size, num_qp, num_worker, mode, stat_interval, duration, loop, num_ips = 0;
+    int i, opt, port, buffer_size, num_qp, num_worker, mode, stat_interval, duration, loop, num_ips = 0, ring_size;
     char host[64], client_start[64], *ipmap_str = NULL;
     pid_t pids[RDMASRV_MAX_WORKER];
 	int total_duration = 0;
     unsigned long prev_rx_tr = 0, prev_tx_tr = 0, prev_rx_b = 0, prev_tx_b = 0;
 
-    while((opt = getopt(argc, argv, "p:h:b:q:w:s:i:d:l:c:n:m:")) != -1) {
+    while((opt = getopt(argc, argv, "p:h:b:q:w:s:i:d:l:c:n:m:r:")) != -1) {
         switch (opt) {
             case 'p':
                 port = atoi(optarg);
@@ -111,8 +111,11 @@ int main(int argc, char **argv)
                 ipmap_str = malloc(strlen(optarg) + 1);
                 strcpy(ipmap_str, optarg);
                 break;
+            case 'r':
+                ring_size = atoi(optarg);
+                break;
             default:
-                fprintf(stderr, "client -p <port> -h <destination IP> -b <buffer size> -q <num of queue pairs> -w <workers> -s <0: passive read 1: passive write 2: active read 3: active write> -i <stats interval> -d <duration> -l <loop 0: infinite> -c <start client IP> -n <number of client IPs> -m <ip map>\n");
+                fprintf(stderr, "client -p <port> -h <destination IP> -b <buffer size> -q <num of queue pairs> -w <workers> -s <0: passive read 1: passive write 2: active read 3: active write> -i <stats interval> -d <duration> -l <loop 0: infinite> -c <start client IP> -n <number of client IPs> -m <ip map> -r <request ring size>\n");
                 exit(100);
         }
     }
@@ -155,6 +158,7 @@ int main(int argc, char **argv)
             parse_ipmap(ipmap_str);
             free(ipmap_str);
         }
+        g_conf->ring_size = ring_size;
     }
 
     g_ctrl->stop = 0;
@@ -191,6 +195,46 @@ int main(int argc, char **argv)
         fprintf(stdout, "RX Transactions: %u Rate: %lf\n", total_rx_tr, (double)((total_rx_tr - prev_rx_tr) / stat_interval));
         fprintf(stdout, "RX Bytes: %u Rate: %lf Gbps\n", total_rx_b, (double)((double)((total_rx_b - prev_rx_b) / stat_interval) / 1000000000));
         fprintf(stdout, "TX Bytes: %u Rate: %lf Gbps\n", total_tx_b, (double)((double)((total_tx_b - prev_tx_b) / stat_interval) / 1000000000));
+        fprintf(stdout, "msg_mr_tx:\t");
+        for (i = 0; i < num_worker; i++) {
+            fprintf(stdout, "\t%lu", g_stats[i].msg_mr_tx);
+        }
+        fprintf(stdout, "\n");
+        fprintf(stdout, "msg_mr_rx:\t");
+        for (i = 0; i < num_worker; i++) {
+            fprintf(stdout, "\t%lu", g_stats[i].msg_mr_rx);
+        }
+        fprintf(stdout, "\n");
+        fprintf(stdout, "msg_done_tx:\t");
+        for (i = 0; i < num_worker; i++) {
+            fprintf(stdout, "\t%lu", g_stats[i].msg_done_tx);
+        }
+        fprintf(stdout, "\n");
+        fprintf(stdout, "msg_done_rx:\t");
+        for (i = 0; i < num_worker; i++) {
+            fprintf(stdout, "\t%lu", g_stats[i].msg_done_rx);
+        }
+        fprintf(stdout, "\n");
+        fprintf(stdout, "write attempt:\t");
+        for (i = 0; i < num_worker; i++) {
+            fprintf(stdout, "\t%lu", g_stats[i].write_attempt);
+        }
+        fprintf(stdout, "\n");
+        fprintf(stdout, "write success:\t");
+        for (i = 0; i < num_worker; i++) {
+            fprintf(stdout, "\t%lu", g_stats[i].write_success);
+        }
+        fprintf(stdout, "\n");
+        fprintf(stdout, "read attempt:\t");
+        for (i = 0; i < num_worker; i++) {
+            fprintf(stdout, "\t%lu", g_stats[i].read_attempt);
+        }
+        fprintf(stdout, "\n");
+        fprintf(stdout, "read success:\t");
+        for (i = 0; i < num_worker; i++) {
+            fprintf(stdout, "\t%lu", g_stats[i].read_success);
+        }
+        fprintf(stdout, "\n");
         prev_rx_tr = total_rx_tr;
         prev_tx_tr = total_tx_tr;
         prev_rx_b = total_rx_b;

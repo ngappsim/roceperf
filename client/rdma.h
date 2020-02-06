@@ -5,6 +5,8 @@
 #include <rdma/rdma_cma.h>
 #include "main.h"
 
+#define MAX_RING_SIZE 64
+
 typedef enum {
     CONN_INIT = 0,
     CONN_CONNECTED,
@@ -20,10 +22,15 @@ struct message {
 		MSG_MR,
 		MSG_DONE
 	} type;
+    uint32_t mr_num;
+    struct ibv_mr mr[MAX_RING_SIZE];
+};
 
-	union {
-    	struct ibv_mr mr;
-  	} data;
+struct rdma_rqring_elem {
+    struct ibv_mr *rdma_local_mr;
+    char *rdma_local_region;
+    struct ibv_mr peer_mr;
+    int free;
 };
 
 struct rdma_connection {
@@ -36,11 +43,10 @@ struct rdma_connection {
     struct ibv_qp *qp;
     struct ibv_mr *recv_msg_mr;
     struct ibv_mr *send_msg_mr;
-    struct ibv_mr *rdma_local_mr;
-    struct ibv_mr peer_mr;
+    int r_elem_free;
+    struct rdma_rqring_elem r_elem[MAX_RING_SIZE];
     struct message *recv_msg;
     struct message *send_msg;
-    char *rdma_local_region;
     rdma_conn_state state;
     void *cc_event_opaque;
     void *ec_event_opaque;

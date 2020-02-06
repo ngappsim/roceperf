@@ -34,6 +34,12 @@ struct rdmasrv_stat {
     unsigned long rx_transactions;
     unsigned long txbytes;
     unsigned long rxbytes;
+    unsigned long msg_mr_tx;
+    unsigned long msg_mr_rx;
+    unsigned long msg_done_tx;
+    unsigned long msg_done_rx;
+    unsigned long write;
+    unsigned long read;
 };
 
 typedef enum {
@@ -53,7 +59,7 @@ extern struct rdmasrv_stat *g_stats;
 extern struct rdmasrv_slave_ctrl *g_ctrl;
 extern int g_slave_id;
 
-extern void rdmasrv_run(int port, int buffer_size, int num_qp, rdmasrv_mode mode, int loop);
+extern void rdmasrv_run(int port, int buffer_size, int num_qp, rdmasrv_mode mode, int loop, int ring_size);
 
 #define RDMASRV_MAX_WORKER 64
 
