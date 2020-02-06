@@ -2,7 +2,7 @@
 
 if [ $# -ne 4 ]; then
     echo "sh $0 <number of NIC> <module path> <library path> <NIC name>"
-    echo "Example: sh $0 1 /shared/port/mod /shared/port/lib ixint"
+    echo "Example: sh $0 1 /shared/port/roce/mod /shared/port/roce/lib ixint"
     exit
 fi
 
@@ -55,19 +55,22 @@ echo "DONE"
 
 echo "Adding devices ..."
 
+name=$4
+
 a=0
 while [ $a -lt $numdev ]
 do
     x=`expr $a + 1`
+    echo "Adding $name$x ..."
     if [ $a -eq 0 ]; then
-        echo $5$x > /sys/module/rdma_rxe/parameters/add
+        echo $name$x > /sys/module/rdma_rxe/parameters/add
     else
-        echo $5$x >> /sys/module/rdma_rxe/parameters/add
+        echo $name$x >> /sys/module/rdma_rxe/parameters/add
     fi
     a=`expr $a + 1`
 done
 
 echo "DONE"
 
-echo "Run in server: LD_LIBRARY_PATH=/shared/port/lib ./shared/port/roce/server -p 5555 -b 65536 -q 1 -w 12 -s 1 -i 10 -r 8"
-echo "Run in client: LD_LIBRARY_PATH=/shared/port/lib ./shared/port/roce/client -p 5555 -h 67.67.0.101 -b 65536 -q 1 -w 12 -s 3 -i 10 -d 60000 -l 0 -c 67.67.0.1 -n 1 -r 8"
+echo "Run in server: LD_LIBRARY_PATH=/shared/port/roce/lib ./shared/port/roce/server -p 5555 -b 65536 -q 1 -w 12 -s 1 -i 10 -r 8"
+echo "Run in client: LD_LIBRARY_PATH=/shared/port/roce/lib ./shared/port/roce/client -p 5555 -h 67.67.0.101 -b 65536 -q 1 -w 12 -s 3 -i 10 -d 60000 -l 0 -c 67.67.0.1 -n 1 -r 8"

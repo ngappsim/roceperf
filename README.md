@@ -32,7 +32,7 @@ Pre-requisites: IXIA roce package (p4 path: //packages/3rdParty/roce/main) compi
 1. Build package.
 
 # ./clean.sh
-# ./build.sh /opt/cegl-3.2/mips64-octeon-linux-gnu/gcc-4.7.0-glibc-2.16.0/bin/mips64-octeon-linux-gnu-gcc /home/rabhunia/p4/packages/3rdParty/roce/main
+# ./build.sh /opt/cegl-3.2/mips64-octeon-linux-gnu/gcc-4.7.0-glibc-2.16.0/bin/mips64-octeon-linux-gnu-gcc ~/p4/packages/3rdParty/roce/main
 
 2. Copy executables from ${PWD}/.bin/ to port (e.g. /shared/port/roce/).
 
@@ -51,10 +51,10 @@ Pre-requisites: IXIA roce package (p4 path: //packages/3rdParty/roce/main) compi
 5. Prepare server and run.
 
 # sh /shared/port/roce/setup.sh 1 /shared/port/roce/mod /shared/port/roce/lib ixint
-# LD_LIBRARY_PATH=/shared/port/roce/lib ./shared/port/roce/server -p 5555 -b 65536 -q 1 -w 48 -s 1 -i 10 -r 8
+# LD_LIBRARY_PATH=/shared/port/roce/lib /shared/port/roce/server -p 5555 -b 65536 -q 1 -w 48 -s 1 -i 10 -r 8
 
 6. Prepare client and run.
 
 # sh /shared/port/roce/setup.sh 1 /shared/port/roce/mod /shared/port/roce/lib ixint
-# LD_LIBRARY_PATH=/shared/port/roce/lib ./shared/port/roce/client -p 5555 -h 67.67.0.101 -b 65536 -q 1 -w 48 -s 3 -i 10 -d 60000 -l 0 -c 67.67.0.1 -n 1 -r 8
+# LD_LIBRARY_PATH=/shared/port/roce/lib /shared/port/roce/client -p 5555 -h 67.67.0.101 -b 65536 -q 1 -w 48 -s 3 -i 10 -d 60000 -l 0 -c 67.67.0.1 -n 1 -r 8
 
