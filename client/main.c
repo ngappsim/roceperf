@@ -130,7 +130,7 @@ int main(int argc, char **argv)
         exit(-2);
     }
 
-    g_stats = mmap(NULL, sizeof(struct rdmacli_stat), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    g_stats = mmap(NULL, num_worker * sizeof(struct rdmacli_stat), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     if (g_stats == NULL) {
         fprintf(stderr, "Failed to allocate stats.\n");
         exit(-3);

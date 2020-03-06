@@ -11,9 +11,12 @@ IXIA_COMPILER=$1
 
 IXIA_ROCE_PATH=$IXIA_ROCE_PATH IXIA_COMPILER=$IXIA_COMPILER make -C client/ all
 IXIA_ROCE_PATH=$IXIA_ROCE_PATH IXIA_COMPILER=$IXIA_COMPILER make -C server/ all
+IXIA_ROCE_PATH=$IXIA_ROCE_PATH IXIA_COMPILER=$IXIA_COMPILER make -C pingpong/ all
 
 mkdir -p .bin
 
 cp -vf setup.sh .bin/
+cp -vf rate.sh .bin/
 cp -vf server/server .bin/
 cp -vf client/client .bin/
+cp -vf pingpong/uc_pingpong .bin/

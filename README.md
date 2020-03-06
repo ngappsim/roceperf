@@ -41,6 +41,7 @@ Pre-requisites: IXIA roce package (p4 path: //packages/3rdParty/roce/main) compi
 
 3. Copy libraries (e.g. /home/rabhunia/p4/packages/3rdParty/roce/main/out/bin/octeon2/8.50/host) and modules (e.g. /home/rabhunia/p4/packages/3rdParty/roce/main/out/bin/octeon2/8.50/linux_3.10) from IXIA roce build to port (e.g. /shared/port/roce/lib and /shared/port/roce/mod).
 
+# cd ~/p4/packages/3rdParty/roce/main/
 # sshpass -p 1x14c0m scp out/bin/octeon2/8.50/host/* root@10.36.83.115:/rw/ports/1/1/roce/lib/
 # sshpass -p 1x14c0m scp out/bin/octeon2/8.50/host/* root@10.36.83.115:/rw/ports/1/2/roce/lib/
 # sshpass -p 1x14c0m scp out/bin/octeon2/8.50/linux_3.10/* root@10.36.83.115:/rw/ports/1/1/roce/mod/
